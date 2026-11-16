@@ -90,6 +90,19 @@ template <class T> T Read(uintptr_t address) {
     safemem::ReadBytes(reinterpret_cast<void*>(address), &value, sizeof(value));
     return value;
 }
+// Runs once per linked asset. VirtualQuery here cost about half of the DB thread time.
+void ReadLinkedAsset(const uintptr_t* header, uintptr_t& asset, char* name, size_t nameSize) {
+    __try {
+        asset = *header;
+        const char* source = *reinterpret_cast<const char* const*>(asset);
+        size_t length = 0;
+        for (; length + 1 < nameSize && source[length]; ++length)
+            name[length] = source[length];
+        name[length] = 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        name[0] = 0;
+    }
+}
 uintptr_t LinkAssetEntry(int type, uintptr_t* header) {
     const DWORD saved = GetLastError();
     const auto previous = assetcontext::current;
@@ -98,9 +111,7 @@ uintptr_t LinkAssetEntry(int type, uintptr_t* header) {
     context.active = true;
     context.type = type;
     context.phase = "DB_LinkXAssetEntry";
-    context.asset = Read<uintptr_t>(reinterpret_cast<uintptr_t>(header));
-    const auto name = Read<uintptr_t>(context.asset);
-    safemem::ReadString(reinterpret_cast<const char*>(name), context.name, sizeof(context.name));
+    ReadLinkedAsset(header, context.asset, context.name, sizeof(context.name));
     if (type == 23 || type == 29) {
         const auto field = type == 29 ? 0x150 : 0xC0;
         context.shapeData = Read<uintptr_t>(context.asset + field);
