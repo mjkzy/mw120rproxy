@@ -30,6 +30,8 @@
 #include "custom_ladders.h"
 #include "custom_glass.h"
 #include "noclip.h"
+#include "load_prefetch.h"
+#include "exec_filter.h"
 
 namespace {
 HMODULE g_self = nullptr;
@@ -69,6 +71,8 @@ bool DoInstallHooks() {
     auto status = dvars::InstallHook(g_base, g_config.hookBool, g_config.hookVariant);
     if (status == hook::Status::Installed && g_config.offlineAuth)
         status = offlineauth::Install(g_base);
+    if (status == hook::Status::Installed)
+        status = execfilter::Install(g_base);
     if (status == hook::Status::Installed && g_config.engineDiagnostics)
         status = enginediag::Install(g_base);
     if (status == hook::Status::Installed && g_config.fastfileDiagnostics)
@@ -206,7 +210,7 @@ DWORD WINAPI InitThread(LPVOID) {
             g_config.offlineAuth ||
             g_config.fastfileDiagnostics || g_config.customMapFileMonitor || g_config.developerUI ||
             g_config.customMapLoader || g_config.engineDiagnostics) {
-            dvars::InitDefaults(false);
+            dvars::InitDefaults(false, true, g_config.frontendScene);
             state::hookState.store((int)state::HookState::WaitingForSignal);
             if (!g_triggerArmed) {
                 state::hookState.store((int)state::HookState::Failed);
@@ -262,6 +266,9 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
             state::imageSize.store(imageSize);
             diagnostics::Initialize(module);
             g_gdiCompatibility = startup::ApplyGdiCompatibility(g_base);
+            const bool prefetch = config::Load(module).loadPrefetch;
+            loadprefetch::Start(module, g_base, {prefetch, prefetch});
+            SetEnvironmentVariableA("CODPC_NOCLOUD_SYNC", "1"); // config save gate 0xF529B0
             g_triggerArmed = trigger::InstallLoadImageTrigger(&OnSplashLoaded, g_base, 0x1BD347F);
         }
         HANDLE thread = CreateThread(nullptr, 0, InitThread, nullptr, 0, nullptr);

@@ -67,6 +67,8 @@ target("mw120rproxy")
         "custom_omnvars.cpp",
         "custom_maps.cpp",
         "file_open_hook.cpp",
+        "load_prefetch.cpp",
+        "exec_filter.cpp",
         "dvar_patches.cpp",
         "imports.cpp",
         "inline_hook.cpp",

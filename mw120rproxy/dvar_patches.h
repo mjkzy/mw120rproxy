@@ -8,7 +8,8 @@
 namespace dvars {
 // Seed the built-in offline override table (call once at startup). When onlineMpRoute is set, also apply
 // the A/B online-MP route block (UI-online dvars on, direct-service dvars off).
-void InitDefaults(bool onlineMpRoute, bool luiForceOnline = true);
+void InitDefaults(bool onlineMpRoute, bool luiForceOnline = true,
+                  bool frontendScene = true);
 
 // True while a non-bool boot override needs the core registration hook even when
 // the optional dvar tracer is disabled.

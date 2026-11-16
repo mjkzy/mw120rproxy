@@ -283,9 +283,12 @@ bool HasVariantBootOverrides() {
     return sizeof(kBootIntDefaults) != 0;
 }
 
-void InitDefaults(bool onlineMpRoute, bool luiForceOnline) {
+void InitDefaults(bool onlineMpRoute, bool luiForceOnline, bool frontendScene) {
     for (const auto& d : kDefaults)
         Allocate(d.token, d.name, d.value, /*enabled*/ true);
+    if (!frontendScene)
+        SetForced("LOTLQRLOMK", "frontEndSceneEnabled", false); // 0x10C665E
+    SetForced("PRSLOMMRM", "net_upnp_enabled", false); // 0x13E11D3
 
     if (onlineMpRoute) {
         // ⭐ ONLINE-MP ROUTE (A/B via config online_mp_route). Make the UI BELIEVE it's online so the

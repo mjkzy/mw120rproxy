@@ -16,6 +16,8 @@ struct Settings {
     bool customMapLoader = true;        // selected-package reads through native disk handles
     bool customMapFileMonitor = false;  // trace selected zone file-open requests
     bool customMapFileRedirect = false; // replace an observed selected zone path
+    bool loadPrefetch = true;           // record game-folder reads, read them ahead on the next run
+    bool frontendScene = false;         // 3D menu scene and its mp_frontend zone
     std::string hookTrigger = "loadimage"; // "loadimage" (default) | "prologue"
 };
 
@@ -48,6 +50,8 @@ inline Settings Load(HMODULE self) {
     s.customMapLoader = geti(OBFW(L"custom_map_loader"), s.customMapLoader) != 0;
     s.customMapFileMonitor = geti(OBFW(L"custom_map_file_monitor"), s.customMapFileMonitor) != 0;
     s.customMapFileRedirect = geti(OBFW(L"custom_map_file_redirect"), s.customMapFileRedirect) != 0;
+    s.loadPrefetch = geti(OBFW(L"load_prefetch"), s.loadPrefetch) != 0;
+    s.frontendScene = geti(OBFW(L"frontend_scene"), s.frontendScene) != 0;
     if (s.customMapFileRedirect)
         s.customMapFileMonitor = true;
 
