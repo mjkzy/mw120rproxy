@@ -34,3 +34,6 @@ evidence/
 *.d3dbsp
 *.identity.ini
 local.env.ps1
+
+# Local docs
+docs/
