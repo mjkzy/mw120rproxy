@@ -54,6 +54,8 @@ std::string Translate(std::string_view input) {
             const char* replacement = nullptr;
             if (tokenIndex == 0 && (token == "noclip" || token == "mw_noclip"))
                 replacement = "cmd noclip";
+            if (tokenIndex == 0 && token == "give")
+                replacement = "cmd give";
             if ((tokenIndex == 0 && !dvarCommand) || (tokenIndex == 1 && dvarCommand))
                 for (const auto& entry : dvardb::kEntries)
                     if (token == entry.name) {

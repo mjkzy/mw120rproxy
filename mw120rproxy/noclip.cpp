@@ -11,11 +11,38 @@ std::atomic<ClientCommand> original{nullptr};
 template <class Fn> Fn Function(const replay::Binding& b) {
     return reinterpret_cast<Fn>(base + b.rva);
 }
+struct alignas(8) Weapon {
+    uint8_t data[0x40];
+};
+// Mirrors PlayerCmd_giveWeapon (11F7970) without script parameters; registers late like precache (12800E0).
+void Give(uintptr_t client, const char* weaponName) {
+    Weapon weapon{};
+    Function<void (*)(void*, const char*)>(replay::RegisterWeapon)(nullptr, weaponName);
+    const bool alternate = Function<bool (*)(const char*)>(replay::WeaponNameIsAlternate)(weaponName);
+    if (!Function<bool (*)(const char*, Weapon*, void*)>(replay::WeaponFromName)(
+            weaponName, &weapon, reinterpret_cast<void*>(base + replay::WeaponNameLookup.rva)) ||
+        !*reinterpret_cast<uint16_t*>(weapon.data)) {
+        LOG_WARN("Give", "unknown weapon '%s'", weaponName);
+        return;
+    }
+    const auto map = Function<void* (*)()>(replay::WeaponMap)();
+    const bool owned =
+        Function<int (*)(void*, uintptr_t, const Weapon*)>(replay::FindPlayerWeapon)(map, client, &weapon) >= 0;
+    if (!Function<int (*)(uintptr_t, void*, const Weapon*, int, int, int)>(replay::GivePlayerWeapon)(
+            client, nullptr, &weapon, 0, alternate, 0)) {
+        LOG_WARN("Give", "unable to equip '%s'", weaponName);
+        return;
+    }
+    Function<void (*)(uintptr_t, const Weapon*, int, int)>(replay::InitializeAmmo)(client, &weapon, alternate, owned);
+    Function<void (*)(int, const Weapon*)>(replay::SwitchToWeapon)(0, &weapon);
+    LOG_INFO("Give", "gave '%s' to local player", weaponName);
+}
 void Command(int clientNum) {
-    char name[32]{}, value[32]{}, extra[2]{};
+    char name[32]{}, value[128]{}, extra[2]{};
     auto argv = Function<void (*)(int, char*, size_t)>(replay::ServerArgv);
     argv(0, name, sizeof(name));
-    if (_stricmp(name, "noclip") && _stricmp(name, "mw_noclip")) {
+    const bool give = !_stricmp(name, "give");
+    if (!give && _stricmp(name, "noclip") && _stricmp(name, "mw_noclip")) {
         original.load()(clientNum);
         return;
     }
@@ -28,6 +55,20 @@ void Command(int clientNum) {
     }
     argv(1, value, sizeof(value));
     argv(2, extra, sizeof(extra));
+    if (give) {
+        uintptr_t entities = 0, client = 0;
+        if (!value[0] || extra[0]) {
+            LOG_WARN("Give", "usage: give <weapon>");
+            return;
+        }
+        if (!safemem::ReadBytes(reinterpret_cast<void*>(base + 0xBC20F00), &entities, 8) || !entities ||
+            !safemem::ReadBytes(reinterpret_cast<void*>(entities + 0x150), &client, 8) || !client) {
+            LOG_WARN("Give", "spawn as a player before giving a weapon");
+            return;
+        }
+        Give(client, value);
+        return;
+    }
     const bool on = !_stricmp(value, "on") || !strcmp(value, "1");
     const bool off = !_stricmp(value, "off") || !strcmp(value, "0");
     if (extra[0] || (value[0] && !on && !off)) {
@@ -62,7 +103,9 @@ hook::Status Install(uintptr_t address) {
         return hook::Status::Installed;
     base = address;
     for (const auto* b : {&replay::ServerArgv, &replay::NoclipMovementFlags, &replay::IsFrontEnd,
-                          &replay::GetBool}) {
+                          &replay::GetBool, &replay::WeaponFromName, &replay::WeaponNameIsAlternate,
+                          &replay::WeaponNameLookup, &replay::RegisterWeapon, &replay::WeaponMap, &replay::FindPlayerWeapon,
+                          &replay::GivePlayerWeapon, &replay::InitializeAmmo, &replay::SwitchToWeapon}) {
         unsigned char data[64]{};
         if (!safemem::ReadBytes(reinterpret_cast<void*>(base + b->rva), data, b->size) ||
             memcmp(data, b->bytes, b->size))
@@ -72,7 +115,7 @@ hook::Status Install(uintptr_t address) {
     auto result =
         hook::Install(reinterpret_cast<void*>(base + b.rva), &Command, b.bytes, b.size, original);
     if (result == hook::Status::Installed)
-        LOG_INFO("Noclip", "local server command installed: noclip [on|off|1|0]");
+        LOG_INFO("Noclip", "local server commands installed: noclip [on|off|1|0], give <weapon>");
     return result;
 }
 }
