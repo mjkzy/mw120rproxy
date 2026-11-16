@@ -299,7 +299,7 @@ bool HasReplayFastfileHeader(const std::filesystem::path& path) {
     std::memcpy(&residentPartSize, header.data() + 0x14, sizeof(residentPartSize));
     std::memcpy(&xfileSize, header.data() + 0x20, sizeof(xfileSize));
     for (size_t index = 0; index < 11; ++index) {
-        uint32_t blockSize = 0;
+        uint64_t blockSize = 0;
         std::memcpy(&blockSize, header.data() + 0x30 + index * sizeof(blockSize),
                     sizeof(blockSize));
         streamBytes += blockSize;
@@ -310,7 +310,7 @@ bool HasReplayFastfileHeader(const std::filesystem::path& path) {
                              : fileSize >= 0xA0 && compression == 1 &&
                                    std::memcmp(header.data() + 0x88, "IWffs100", 8) == 0;
     return headerVersion == 11 && xfileVersion == 0xFF7 && encryption == 0 && body &&
-           residentPartSize == fileSize - 0x88 && xfileSize != 0 && streamBytes >= xfileSize;
+           residentPartSize == fileSize - 0x88 && xfileSize != 0 && streamBytes != 0;
 }
 
 std::array<std::string, 5> ZoneNames(const std::string& id) {
@@ -795,7 +795,8 @@ bool ResolveDiskRead(const char* request, std::string& pathOut) {
             continue;
         const auto filename = zone + extension;
         for (const auto& folder :
-             {std::filesystem::path{}, std::filesystem::path{"zone"},
+             {std::filesystem::path{}, std::filesystem::path{"english"},
+              std::filesystem::path{"worldwide"}, std::filesystem::path{"zone"},
               std::filesystem::path{"zone/english"}, std::filesystem::path{"zone/worldwide"}}) {
             const auto expected = (g_gameRoot / folder / filename).lexically_normal();
             if (_wcsicmp(full.c_str(), expected.c_str()) != 0)

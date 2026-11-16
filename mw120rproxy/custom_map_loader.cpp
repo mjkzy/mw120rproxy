@@ -108,12 +108,16 @@ HANDLE __fastcall OpenSelected(const char* filename, unsigned flags) {
         LOG_ERR("Maps", "selected package path resolution failed; native request retained");
     }
     SetLastError(entryError);
+    // VFSFile::Read (RVA 0xD8C030) uses synchronous ReadFile, so a routed handle
+    // must not be FILE_FLAG_OVERLAPPED (0x8) or FILE_FLAG_NO_BUFFERING (0x10).
+    const unsigned openFlags = redirect ? flags & ~0x18u : flags;
     const HANDLE result = g_original.load(std::memory_order_acquire)(
-        redirect ? replacement.c_str() : filename, flags);
+        redirect ? replacement.c_str() : filename, openFlags);
     const DWORD exitError = GetLastError();
     if (redirect)
-        LOG_INFO("Maps", "native disk open '%s' -> '%s': %s flags=0x%X", request,
-                 replacement.c_str(), result != INVALID_HANDLE_VALUE ? "opened" : "FAILED", flags);
+        LOG_INFO("Maps", "native disk open '%s' -> '%s': %s flags=0x%X (requested 0x%X)", request,
+                 replacement.c_str(), result != INVALID_HANDLE_VALUE ? "opened" : "FAILED",
+                 openFlags, flags);
     SetLastError(exitError);
     return result;
 }
