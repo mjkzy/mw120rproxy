@@ -28,6 +28,7 @@ struct Package {
     std::vector<AttachmentRow> attachmentRows;
 };
 std::vector<std::unique_ptr<Package>> g_packages;
+std::map<std::string, std::string> g_soundBankPaths;
 std::atomic<bool> g_available{false};
 std::mutex g_mutex;
 struct ZoneInfo {
@@ -564,13 +565,23 @@ hook::Status Install(uintptr_t base) {
         GetModuleFileNameW(nullptr, executable, static_cast<DWORD>(std::size(executable)));
     if (!length || length >= std::size(executable))
         return hook::Status::Failed;
-    const auto root = std::filesystem::path(executable).parent_path() / "zone";
+    const auto folder = std::filesystem::path(executable).parent_path();
+    auto root = folder / "mods" / "mw120r" / "weapons";
+    if (!std::filesystem::is_directory(root))
+        root = folder / "zone";
     std::vector<std::unique_ptr<Package>> packages;
     std::set<unsigned> slots;
+    std::map<std::string, std::string> soundBankPaths;
     std::string currentManifest;
     try {
         for (const auto& entry : std::filesystem::directory_iterator(root)) {
             const auto filename = entry.path().filename().string();
+            if (entry.path().extension() == ".sabs" && entry.is_regular_file()) {
+                const auto diskPath = entry.path().u8string();
+                soundBankPaths.emplace(filename, std::string(reinterpret_cast<const char*>(diskPath.data()),
+                                                             diskPath.size()));
+                continue;
+            }
             if (!filename.starts_with("iw8_cw_") || !filename.ends_with(".weapon.json"))
                 continue;
             currentManifest = filename;
@@ -655,8 +666,10 @@ hook::Status Install(uintptr_t base) {
                       game::kDbLoadFastfilesPrologue, game::kDbLoadFastfilesStolen, g_load);
     if (status == hook::Status::Installed) {
         g_packages = std::move(packages);
+        g_soundBankPaths = std::move(soundBankPaths);
         g_available.store(true, std::memory_order_release);
-        logger::Trace("Weapons", "registered %zu separate base-weapon packages", g_packages.size());
+        logger::Trace("Weapons", "registered %zu separate base-weapon packages, %zu sound banks",
+                      g_packages.size(), g_soundBankPaths.size());
     }
     return status;
 }
@@ -672,6 +685,13 @@ bool ResolveDiskRead(const char* name, std::string& path) {
     if (!name || !g_available.load(std::memory_order_acquire))
         return false;
     const auto filename = std::filesystem::path(name).filename();
+    if (filename.extension() == ".sabs") {
+        const auto found = g_soundBankPaths.find(filename.string());
+        if (found == g_soundBankPaths.end())
+            return false;
+        path = found->second;
+        return true;
+    }
     if (filename.extension() != ".ff")
         return false;
     const auto zone = filename.stem().string();
@@ -722,6 +742,8 @@ void* ExtendAsset(int type, const char* name, void* source, uintptr_t callerRva)
                      static_cast<unsigned long long>(callerRva));
             return source;
         }
+        if (const char* skip = getenv("MW120R_CW_SKIP"); skip && strstr(skip, type == 54 ? "table" : "ddl"))
+            return source; // TEMP bisect
         return type == 54 ? ExtendTable(name, source) : ExtendDDL(name, source);
     } catch (const std::exception& error) {
         logger::Trace("Weapons", "'%s' left unchanged: %s", name, error.what());
